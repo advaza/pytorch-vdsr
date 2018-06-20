@@ -85,16 +85,22 @@ print("PSNR_predicted=", psnr_predicted)
 print("PSNR_bicubic=", psnr_bicubic)
 print("It takes {}s for processing".format(elapsed_time))
 
-fig = plt.figure()
-ax = plt.subplot("131")
-ax.imshow(im_gt)
-ax.set_title("GT")
+# fig = plt.figure()
+# ax = plt.subplot("131")
+# ax.imshow(im_gt)
+# ax.set_title("GT")
+im_gt.save(os.path.join('result','GT'), 'png')
 
-ax = plt.subplot("132")
-ax.imshow(im_b)
-ax.set_title("Input(bicubic)")
 
-ax = plt.subplot("133")
-ax.imshow(im_h)
-ax.set_title("Output(vdsr)")
-plt.show()
+# ax = plt.subplot("132")
+# ax.imshow(im_b)
+# ax.set_title("Input(bicubic)")
+im_b.save(os.path.join('result', 'bicubic'), 'png')
+
+# ax = plt.subplot("133")
+# ax.imshow(im_h)
+# ax.set_title("Output(vdsr)")
+# plt.show()
+im_h.save(os.path.join('result', 'out_vdsr'), 'png')
+
+
