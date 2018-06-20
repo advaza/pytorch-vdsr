@@ -89,18 +89,18 @@ print("It takes {}s for processing".format(elapsed_time))
 # ax = plt.subplot("131")
 # ax.imshow(im_gt)
 # ax.set_title("GT")
-im_gt.save(os.path.join('result','GT'), 'png')
+im_gt.save(os.path.join('result','GT.png'))
 
 
 # ax = plt.subplot("132")
 # ax.imshow(im_b)
 # ax.set_title("Input(bicubic)")
-im_b.save(os.path.join('result', 'bicubic'), 'png')
+im_b.save(os.path.join('result', 'bicubic.png'))
 
 # ax = plt.subplot("133")
 # ax.imshow(im_h)
 # ax.set_title("Output(vdsr)")
 # plt.show()
-im_h.save(os.path.join('result', 'out_vdsr'), 'png')
+im_h.save(os.path.join('result', 'out_vdsr.png'))
 
 
