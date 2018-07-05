@@ -1,106 +1,131 @@
-import argparse, os
+import easyargs
+import progressbar
+import imageio
+import os
+import glob
 import torch
+import cv2
+
 from torch.autograd import Variable
-from scipy.ndimage import imread
-from PIL import Image
 import numpy as np
-import time, math
-import matplotlib.pyplot as plt
 
-parser = argparse.ArgumentParser(description="PyTorch VDSR Demo")
-parser.add_argument("--cuda", action="store_true", help="use cuda?")
-parser.add_argument("--model", default="model/model_epoch_50.pth", type=str, help="model path")
-parser.add_argument("--image", default="butterfly_GT", type=str, help="image name")
-parser.add_argument("--scale", default=4, type=int, help="scale factor, Default: 4")
-parser.add_argument("--gpus", default="0", type=str, help="gpu ids (default: 0)")
+IMAGE_FORMATS = ['jpg', 'png', 'jpeg']
+VIDEO_FORMATS = ['mp4']
 
-def PSNR(pred, gt, shave_border=0):
-    height, width = pred.shape[:2]
-    pred = pred[shave_border:height - shave_border, shave_border:width - shave_border]
-    gt = gt[shave_border:height - shave_border, shave_border:width - shave_border]
-    imdff = pred - gt
-    rmse = math.sqrt(np.mean(imdff ** 2))
-    if rmse == 0:
-        return 100
-    return 20 * math.log10(255.0 / rmse)
-    
+
 def colorize(y, ycbcr): 
     img = np.zeros((y.shape[0], y.shape[1], 3), np.uint8)
     img[:,:,0] = y
     img[:,:,1] = ycbcr[:,:,1]
     img[:,:,2] = ycbcr[:,:,2]
-    img = Image.fromarray(img, "YCbCr").convert("RGB")
+    img = np.ndarray.astype(img, dtype=np.uint8)
+    img = cv2.cvtColor(img, cv2.COLOR_YCR_CB2RGB)
     return img
 
-opt = parser.parse_args()
-cuda = opt.cuda
 
-if cuda:
-    print("=> use gpu id: '{}'".format(opt.gpus))
-    os.environ["CUDA_VISIBLE_DEVICES"] = opt.gpus
-    if not torch.cuda.is_available():
+def process_image(im_input, model, cuda):
+
+    im_b_ycbcr = cv2.cvtColor(im_input, cv2.COLOR_RGB2YCR_CB)
+    im_b_y = im_b_ycbcr[:,:,0].astype(float)
+    im_input = im_b_y/255.
+
+    im_input = Variable(torch.from_numpy(im_input).float()).view(1, -1, im_input.shape[0], im_input.shape[1])
+    if cuda:
+        im_input = im_input.cuda()
+
+    out = model(im_input)
+    out = out.cpu()
+
+    im_h_y = out.data[0].numpy().astype(np.float32)
+
+    im_h_y = im_h_y * 255.
+    im_h_y[im_h_y < 0] = 0
+    im_h_y[im_h_y > 255.] = 255.
+
+    im_h = colorize(im_h_y[0,:,:], im_b_ycbcr)
+
+    return im_h
+
+
+def files_in(input_path, extensions):
+
+    all_files = []
+    for suffix in extensions:
+        all_files.append(glob.glob(os.path.join(input_path, '*.' + suffix.lower())))
+    return all_files if all_files else None
+
+
+def process_out_file_path(file_name, output_dir):
+
+    if output_dir is None:
+        output_dir = os.path.abspath(os.path.dirname(file_name))
+
+    if not os.path.isdir(output_dir):
+        os.makedirs(output_dir)
+
+    basename = os.path.basename(file_name)
+    extension = basename.split('.')[-1]
+    out_name = basename[:-len(extension)-1] + '_VDSR' + '.' + extension
+
+    return os.path.join(output_dir, out_name)
+
+@easyargs
+def main(input_path=None, output_dir=None, model_checkpoint='model/model_epoch_50.pth', cuda=False,
+         gpus="0"):
+
+    if cuda:
+        print("=> use gpu id: '{}'".format(gpus))
+        os.environ["CUDA_VISIBLE_DEVICES"] = gpus
+        if not torch.cuda.is_available():
             raise Exception("No GPU found or Wrong gpu id, please run without --cuda")
 
+    bar = progressbar.ProgressBar()
 
-model = torch.load(opt.model, map_location=lambda storage, loc: storage)["model"]
+    model = torch.load(model_checkpoint, map_location=lambda storage, loc: storage)["model"]
+    if cuda:
+        model = model.cuda()
+    else:
+        model = model.cpu()
 
-im_gt_ycbcr = imread("Set5/" + opt.image + ".bmp", mode="YCbCr")
-im_b_ycbcr = imread("Set5/"+ opt.image + "_scale_"+ str(opt.scale) + ".bmp", mode="YCbCr")
-    
-im_gt_y = im_gt_ycbcr[:,:,0].astype(float)
-im_b_y = im_b_ycbcr[:,:,0].astype(float)
+    image_files, video_files = None, None
+    if os.path.isfile(input_path):
+        extension = os.path.basename(input_path).split('.')[-1]
+        if extension in IMAGE_FORMATS:
+            image_files = [input_path]
+        elif extension in VIDEO_FORMATS:
+            video_files = [input_path]
+        else:
+            raise ValueError(
+                'Input path should be either a folder or a file of image/video format.')
+    else:
+        video_files = files_in(input_path, extensions=VIDEO_FORMATS)
+        image_files = files_in(input_path, extensions=IMAGE_FORMATS)
 
-psnr_bicubic = PSNR(im_gt_y, im_b_y,shave_border=opt.scale)
+    if image_files:
+        for image_file in bar(image_files):
 
-im_input = im_b_y/255.
+            out_file = process_out_file_path(image_file, output_dir)
+            image = cv2.imread(image_file)
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            out_image = process_image(image, model, cuda)
+            out_image = cv2.cvtColor(out_image, cv2.COLOR_RGB2BGR)
+            cv2.imwrite(out_file, out_image)
 
-im_input = Variable(torch.from_numpy(im_input).float()).view(1, -1, im_input.shape[0], im_input.shape[1])
+    if video_files:
+        try:
+            for video_file in video_files:
+                video_reader = imageio.get_reader(video_file)
+                out_video = process_out_file_path(video_file, output_dir)
+                writer = imageio.get_writer(out_video, fps=video_reader.get_meta_data()['fps'])
+                print('Working on %s' % out_video)
 
-if cuda:
-    model = model.cuda()
-    im_input = im_input.cuda()
-else:
-    model = model.cpu()
+                for frame in bar(video_reader):
 
-start_time = time.time()
-out = model(im_input)
-elapsed_time = time.time() - start_time
-
-out = out.cpu()
-
-im_h_y = out.data[0].numpy().astype(np.float32)
-
-im_h_y = im_h_y * 255.
-im_h_y[im_h_y < 0] = 0
-im_h_y[im_h_y > 255.] = 255.
-
-psnr_predicted = PSNR(im_gt_y, im_h_y[0,:,:], shave_border=opt.scale)
-
-im_h = colorize(im_h_y[0,:,:], im_b_ycbcr)
-im_gt = Image.fromarray(im_gt_ycbcr, "YCbCr").convert("RGB")
-im_b = Image.fromarray(im_b_ycbcr, "YCbCr").convert("RGB")
-
-print("Scale=",opt.scale)
-print("PSNR_predicted=", psnr_predicted)
-print("PSNR_bicubic=", psnr_bicubic)
-print("It takes {}s for processing".format(elapsed_time))
-
-# fig = plt.figure()
-# ax = plt.subplot("131")
-# ax.imshow(im_gt)
-# ax.set_title("GT")
-im_gt.save(os.path.join('result','GT.png'))
+                    writer.append_data(process_image(frame, model, cuda))
+                writer.close()
+        except RuntimeError:  # if there is a problem with the video file.
+            pass
 
 
-# ax = plt.subplot("132")
-# ax.imshow(im_b)
-# ax.set_title("Input(bicubic)")
-im_b.save(os.path.join('result', 'bicubic.png'))
-
-# ax = plt.subplot("133")
-# ax.imshow(im_h)
-# ax.set_title("Output(vdsr)")
-# plt.show()
-im_h.save(os.path.join('result', 'out_vdsr.png'))
-
-
+if __name__ == '__main__':
+    main()
