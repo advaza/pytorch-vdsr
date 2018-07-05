@@ -1,0 +1,7 @@
+chardet
+protobuf
+torch torchvision
+opencv-python
+imageio
+easyargs
+progressbar2
