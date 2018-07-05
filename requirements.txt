@@ -1,6 +1,7 @@
 chardet
 protobuf
-torch torchvision
+torch
+torchvision
 opencv-python
 imageio
 easyargs
