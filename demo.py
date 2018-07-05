@@ -51,7 +51,7 @@ def files_in(input_path, extensions):
 
     all_files = []
     for suffix in extensions:
-        all_files.append(glob.glob(os.path.join(input_path, '*.' + suffix.lower())))
+        all_files.extend(glob.glob(os.path.join(input_path, '*.' + suffix.lower())))
     return all_files if all_files else None
 
 
