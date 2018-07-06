@@ -45,7 +45,7 @@ if cuda:
 model = torch.load(opt.model, map_location=lambda storage, loc: storage)["model"]
 
 #im_gt_ycbcr = imread("Set5/" + opt.image + ".bmp", mode="YCbCr")
-im_b_ycbcr = imread(opt.image + "_scale_"+ str(opt.scale) + ".bmp", mode="YCbCr")
+im_b_ycbcr = imread(opt.image, mode="YCbCr")
     
 #im_gt_y = im_gt_ycbcr[:,:,0].astype(float)
 im_b_y = im_b_ycbcr[:,:,0].astype(float)
